@@ -1,0 +1,7 @@
+# Arduino Build and Cache files
+build/
+*.elf
+*.bin
+*.hex
+*.map
+.vscode/
