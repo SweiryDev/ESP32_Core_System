@@ -1,3 +1,4 @@
+#include "FreeRTOSConfig.h"
 #include "led_matrix.h"
 #include <Adafruit_NeoPixel.h>
 
@@ -14,7 +15,7 @@ static uint8_t* hardwarePixelBuffer;
 static SemaphoreHandle_t frameMutex; 
 static TaskHandle_t MatrixTask;
 
-// --- CORE 1: The Hardware Worker Thread ---
+// --- The Hardware Worker Thread ---
 void MatrixTaskCode(void * parameter) {
   for(;;) {
     int localFrameCount = 1;
@@ -64,7 +65,7 @@ void initMatrix() {
   frameMutex = xSemaphoreCreateMutex();
 
   // Explicitly spawn this task and pin it to Core 1
-  xTaskCreatePinnedToCore(
+  /* xTaskCreatePinnedToCore(
     MatrixTaskCode,   // Function to implement the task
     "MatrixTask",     // Name of the task
     10000,            // Stack size in words
@@ -72,7 +73,17 @@ void initMatrix() {
     1,                // Priority of the task
     &MatrixTask,      // Task handle
     1                 // Core where the task should run (Core 1)
-  );
+  ); */
+
+  // Attach a ready to run task
+  xTaskCreate(
+    MatrixTaskCode, // Task Function
+    "MatrixTaskCode", // Task Name
+    4096, // Stack size (words)
+    NULL, // Function Parameters
+    configMAX_PRIORITIES - 1, // Priority
+    &MatrixTask // Task Handle
+    );
 }
 
 bool updateSingleFrame(uint8_t* frameData) {

@@ -1,3 +1,4 @@
+#include "FreeRTOSConfig.h"
 #include "web_server.h"
 #include <WiFi.h>
 #include <WebServer.h>
@@ -99,7 +100,7 @@ void handleAnim() {
   server.send(400, "text/plain", "Invalid Animation Payload");
 }
 
-// --- CORE 0: Network Task ---
+// --- Network Task ---
 void WebServerTaskCode(void * parameter) {
   for(;;) {
     server.handleClient();
@@ -125,7 +126,7 @@ void initWebServer() {
   server.begin();
 
   // Explicitly spawn this task and pin it to Core 0
-  xTaskCreatePinnedToCore(
+  /* xTaskCreatePinnedToCore(
     WebServerTaskCode, // Function to implement the task
     "WebTask",         // Name of the task
     10000,             // Stack size in words
@@ -133,5 +134,15 @@ void initWebServer() {
     1,                 // Priority of the task
     &WebServerTask,    // Task handle
     0                  // Core where the task should run (Core 0)
-  );
+  ); */
+
+  // Attach a ready to run task
+  xTaskCreate(
+    WebServerTaskCode, // Task Function 
+    "WebTask", // Task Name
+    10000, // Stack size 
+    NULL, // Function Parameter
+    configMAX_PRIORITIES - 1, // Priority
+    &WebServerTask // Task Handle
+    );
 }

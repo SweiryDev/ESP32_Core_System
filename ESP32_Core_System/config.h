@@ -2,8 +2,8 @@
 #define CONFIG_H
 
 // Network Configuration
-#define WIFI_SSID     "Your_SSID"
-#define WIFI_PASSWORD "Your_PASSWORD"
+#define WIFI_SSID     "YOUR_SSID"
+#define WIFI_PASSWORD "YOUR_PASSWORD"
 #define SERVER_PORT   80
 
 // Hardware Configuration (Matrix)

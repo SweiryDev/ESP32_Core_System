@@ -1,18 +1,16 @@
 # ESP32-S3 Core System & Matrix Engine
 
-A high-performance, dual-core operating environment for the ESP32-S3, featuring a real-time web dashboard and a concurrent WS2812B NeoPixel animation engine. 
-
-Developed by [SweiryDev](https://github.com/SweiryDev).
+A high-performance, operating environment for the ESP32-S3, featuring a real-time web dashboard and WS2812B NeoPixel animation engine. 
 
 ![Dashboard Screenshot](assets/dashboard_screenshot.png)
 
-## 🧠 System Architecture & FreeRTOS Implementation
+## System Architecture & FreeRTOS Implementation
 
-This project breaks away from the standard monolithic Arduino `loop()` by implementing a strict dual-core FreeRTOS architecture. This ensures that heavy network traffic or Base64 payload decoding never interrupts the precise timing required by the WS2812B LED matrix.
+This project breaks away from the standard monolithic Arduino `loop()` by implementing  FreeRTOS architecture. This ensures that heavy network traffic or Base64 payload decoding..
 
-* **Core 0 (Network Engine):** Dedicated to handling asynchronous Wi-Fi requests, serving the HTML/Tailwind frontend, and parsing multi-frame Base64 animation payloads.
-* **Core 1 (Hardware Projector):** Pinned as a dedicated hardware thread. It infinitely loops through the active animation buffer, pushing pixels to the matrix at the requested frame rate.
-* **IPC (Inter-Process Communication):** The two cores safely share data using a FreeRTOS `SemaphoreHandle_t` (Mutex). Core 0 locks the memory just long enough to copy new frame arrays, and Core 1 locks it just long enough to read them, completely eliminating race conditions and visual tearing.
+* **Task 1 (Network Engine):** Dedicated to handling asynchronous Wi-Fi requests, serving the HTML/Tailwind frontend, and parsing multi-frame Base64 animation payloads.
+* **Task 2 (Hardware Projector):** Dedicated hardware thread. It infinitely loops through the active animation buffer, pushing pixels to the matrix at the requested frame rate.
+* **IPC (Inter-Process Communication):** The two cores safely share data using a FreeRTOS `SemaphoreHandle_t` (Mutex). Task 1 locks the memory just long enough to copy new frame arrays, and Task 2 locks it just long enough to read them, completely eliminating race conditions and visual tearing.
 
 ## ✨ Features
 
@@ -21,7 +19,7 @@ This project breaks away from the standard monolithic Arduino `loop()` by implem
 * **Real-Time Drawing:** Draw directly on the web canvas and see instant hardware updates.
 * **Animation Studio:** Capture custom multi-frame sequences, define the delay in milliseconds, and deploy them to the board's RAM.
 * **Mathematical Presets:** The frontend dynamically generates complex RGB animation matrices (Police strobes, Rainbow shifts, Sweep, Spin) based on your active color and brightness selections.
-* **Hardware Protections:** Enforces brightness clamping to prevent high-current brownouts when powered via standard USB.
+* **Hardware Protections:** Enforces brightness clamping to prevent high intensities.
 
 ![Matrix Operator](assets/matrix_ui_screenshot.png)
 
@@ -46,7 +44,7 @@ ESP32_Core_System/
 
 1. **Clone the repository:**
    ```bash
-   git clone [https://github.com/SweiryDev/ESP32_Core_System.git](https://github.com/SweiryDev/ESP32_Core_System.git)
+   git clone https://github.com/SweiryDev/ESP32_Core_System
    ```
 2. **Configure Settings:**
    Open `config.h` and update your Wi-Fi credentials:

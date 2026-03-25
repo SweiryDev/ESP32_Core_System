@@ -1,9 +1,9 @@
+#include "pgmspace.h"
 #ifndef HTML_VIEWS_H
 #define HTML_VIEWS_H
 
 // Core System Dashboard (Root: "/")
-
-const char* dashboard_html = R"rawliteral(
+const char dashboard_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html class="dark" lang="en">
 <head>
@@ -84,7 +84,7 @@ const char* dashboard_html = R"rawliteral(
 
 // Matrix Operator Interface (Route: "/matrix")
 
-const char* matrix_operator_html = R"rawliteral(
+const char matrix_operator_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html class="dark" lang="en">
 <head>
