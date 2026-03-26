@@ -90,7 +90,7 @@ const char matrix_operator_html[] PROGMEM = R"rawliteral(
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
-<title>MATRIX_OPERATOR_V12</title>
+<title>MATRIX_OPERATOR_V13</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
     body { background-color: #0e0e0e; color: #e2e2e2; font-family: monospace; overscroll-behavior-y: contain; }
@@ -108,7 +108,15 @@ const char matrix_operator_html[] PROGMEM = R"rawliteral(
     .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
     .gallery-drag { cursor: grab; }
     .gallery-drag:active { cursor: grabbing; }
-    
+
+    #image-import-btn {
+        transition: all 0.2s ease;
+        cursor: pointer;
+    }
+    #image-import-btn:active {
+        transform: scale(0.98);
+    }
+
     .modal-enter { animation: fadeIn 0.2s ease-out forwards; }
     @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
 </style>
@@ -165,8 +173,11 @@ const char matrix_operator_html[] PROGMEM = R"rawliteral(
             </div>
         </div>
     </div>
-
-    <div class="flex gap-3 w-full max-w-md mb-4 items-center">
+    <div class="flex gap-3 w-full max-w-md mb-5 items-center">
+        <label id="image-import-btn" class="flex-1 py-2 bg-[#2a2a2a] text-white border border-[#474747] font-bold tracking-widest uppercase text-xs hover:bg-[#474747] active:scale-95 rounded transition-all text-center cursor-pointer">
+            <input type="file" id="image-input" accept="image/*" class="hidden">
+            <span id="import-text">IMG</span>
+        </label>
         <button id="eraser-btn" class="flex-1 py-2 bg-[#2a2a2a] text-white border border-[#474747] font-bold tracking-widest uppercase text-xs hover:bg-[#474747] active:scale-95 rounded transition-all">Eraser</button>
         <button id="clear-btn" class="flex-1 py-2 border border-[#800000] text-[#ffb4ab] font-bold tracking-widest uppercase text-xs hover:bg-[#800000] hover:text-white active:scale-95 rounded transition-all">Clear</button>
         <button id="open-gallery-btn" class="w-12 h-9 flex items-center justify-center bg-[#1f1f1f] border border-[#474747] text-[#00daf3] rounded hover:bg-[#2a2a2a] active:scale-95 transition-all">
@@ -227,7 +238,9 @@ const char matrix_operator_html[] PROGMEM = R"rawliteral(
     const briPlusBtn = document.getElementById('bri-plus');
     const eraserBtn = document.getElementById('eraser-btn');
     const invertToggle = document.getElementById('invert-toggle');
-    
+    const imageInput = document.getElementById('image-input');
+    const imageImportBtn = document.getElementById('image-import-btn');
+
     // Animation UI
     const frameCountTxt = document.getElementById('frame-count-txt');
     const animDelayInput = document.getElementById('anim-delay');
@@ -241,6 +254,9 @@ const char matrix_operator_html[] PROGMEM = R"rawliteral(
     let lastSentBuffer = "";
     let hardwareWarningShown = false;
     let customFramesB64 = []; 
+
+    let pendingSend = false;
+    let sendTimeout = null;
 
     // --- COLORFUL RGB ANIMATION GENERATORS ---
     const colorfulPresets = {
@@ -313,6 +329,67 @@ const char matrix_operator_html[] PROGMEM = R"rawliteral(
         btn.onclick = () => deployAnimPreset(key);
         animGalleryContainer.appendChild(btn);
     });
+
+    function pixelateImageTo8x8(img, brightnessLevel = 5) {
+        const offscreenCanvas = document.createElement('canvas');
+        const ctx = offscreenCanvas.getContext('2d');
+        offscreenCanvas.width = 8;
+        offscreenCanvas.height = 8;
+        
+        ctx.drawImage(img, 0, 0, 8, 8);
+        
+        const imageData = ctx.getImageData(0, 0, 8, 8);
+        const pixels = imageData.data;
+        
+        const matrix = [];
+        const brightnessFactor = brightnessLevel / 100;
+        
+        for (let row = 0; row < 8; row++) {
+            const rowArray = [];
+            for (let col = 0; col < 8; col++) {
+                const idx = (row * 8 + col) * 4;
+                let r = pixels[idx];
+                let g = pixels[idx + 1];
+                let b = pixels[idx + 2];
+                
+                r = Math.min(255, Math.round(r * brightnessFactor));
+                g = Math.min(255, Math.round(g * brightnessFactor));
+                b = Math.min(255, Math.round(b * brightnessFactor));
+                
+                rowArray.push([r, g, b]);
+            }
+            matrix.push(rowArray);
+        }
+        return matrix;
+    }
+    
+    function applyImageMatrix(matrix) {
+        const cells = Array.from(document.querySelectorAll('.matrix-cell'));
+        
+        for (let row = 0; row < 8; row++) {
+            for (let col = 0; col < 8; col++) {
+                const cell = cells[row * 8 + col];
+                const [r, g, b] = matrix[row][col];
+                
+                cell.dataset.r = r;
+                cell.dataset.g = g;
+                cell.dataset.b = b;
+                
+                const hexColor = '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+                cell.style.backgroundColor = hexColor;
+                
+                const maxBrightness = Math.max(r, g, b);
+                cell.style.opacity = Math.max(0.3, maxBrightness / 255);
+            }
+        }
+        
+        lastSentBuffer = "";
+        if (sendTimeout) {
+            clearTimeout(sendTimeout);
+            sendTimeout = null;
+        }
+        sendToESP32();
+    }
 
     // Deploy Mathematical Anim Preset
     function deployAnimPreset(key) {
@@ -451,11 +528,20 @@ const char matrix_operator_html[] PROGMEM = R"rawliteral(
         return { r: Math.round((rgb.r/maxVal)*bri), g: Math.round((rgb.g/maxVal)*bri), b: Math.round((rgb.b/maxVal)*bri), hex: colorPicker.value, opacity: Math.max(0.15, bri/255) };
     }
 
-    function paintCell(cell) {
+    function paintCell(cell, immediateSend = false) { //immediate cell painting
         if (!cell) return;
-        if (isErasing) { cell.dataset.r=0; cell.dataset.g=0; cell.dataset.b=0; cell.style.backgroundColor='#000'; cell.style.opacity=1; return; }
+        if (isErasing) { 
+            cell.dataset.r=0; cell.dataset.g=0; cell.dataset.b=0; 
+            cell.style.backgroundColor='#000'; 
+            cell.style.opacity=1; 
+            if (immediateSend) sendToESP32();
+            return; 
+        }
         const hw = calculateHardwareRGB();
-        cell.dataset.r=hw.r; cell.dataset.g=hw.g; cell.dataset.b=hw.b; cell.style.backgroundColor=hw.hex; cell.style.opacity=hw.opacity;
+        cell.dataset.r=hw.r; cell.dataset.g=hw.g; cell.dataset.b=hw.b; 
+        cell.style.backgroundColor=hw.hex; 
+        cell.style.opacity=hw.opacity;
+        if (immediateSend) sendToESP32();
     }
 
     function loadGalleryPreset(key) {
@@ -473,22 +559,128 @@ const char matrix_operator_html[] PROGMEM = R"rawliteral(
         sendToESP32();
     }
 
-    grid.addEventListener('mousedown', (e) => { isDrawing = true; if(e.target.classList.contains('matrix-cell')) paintCell(e.target); });
-    grid.addEventListener('mouseover', (e) => { if (isDrawing && e.target.classList.contains('matrix-cell')) paintCell(e.target); });
-    window.addEventListener('mouseup', () => { if (isDrawing) { isDrawing = false; sendToESP32(); } });
-    grid.addEventListener('touchstart', (e) => { isDrawing = true; e.preventDefault(); handleTouch(e); }, { passive: false });
-    grid.addEventListener('touchmove', (e) => { if (!isDrawing) return; e.preventDefault(); handleTouch(e); }, { passive: false });
-    window.addEventListener('touchend', () => { if (isDrawing) { isDrawing = false; sendToESP32(); } });
+    grid.addEventListener('mousedown', (e) => { 
+        isDrawing = true; 
+        if(e.target.classList.contains('matrix-cell')) {
+            paintCell(e.target, true);
+        }
+    });
+    grid.addEventListener('mouseover', (e) => { 
+        if (isDrawing && e.target.classList.contains('matrix-cell')) {
+            paintCell(e.target, true);
+        }
+    });
+    window.addEventListener('mouseup', () => { 
+        if (isDrawing) { 
+            isDrawing = false; 
+            sendToESP32(); 
+        } 
+    });
+    grid.addEventListener('touchstart', (e) => { 
+        isDrawing = true; 
+        e.preventDefault(); 
+        handleTouch(e, true);
+    }, { passive: false });
+    grid.addEventListener('touchmove', (e) => { 
+        if (!isDrawing) return; 
+        e.preventDefault(); 
+        handleTouch(e, true);
+    }, { passive: false });
+    window.addEventListener('touchend', () => { 
+        if (isDrawing) { 
+            isDrawing = false; 
+            sendToESP32();
+        } 
+    });
+        
+    imageInput.addEventListener('change', (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) {
+            alert('Please select a valid image file');
+            imageInput.value = '';
+            return;
+        }
+        const currentBrightness = parseInt(brightnessSlider.value);
+        const importBtn = document.getElementById('image-import-btn');
+        const importText = document.getElementById('import-text');
+        const originalText = importText.textContent;
+        importText.textContent = '⏳ Processing...';
+        importBtn.style.opacity = '0.7';
+        importBtn.style.cursor = 'wait';
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                try {
+                    const pixelatedMatrix = pixelateImageTo8x8(img, currentBrightness);
+                    const cells = Array.from(document.querySelectorAll('.matrix-cell'));
+                    for (let row = 0; row < 8; row++) {
+                        for (let col = 0; col < 8; col++) {
+                            const [r, g, b] = pixelatedMatrix[row][col];
+                            const cell = cells[row * 8 + col];
+                            cell.dataset.r = r; cell.dataset.g = g; cell.dataset.b = b;
+                            // Triple brightness for screen preview only
+                            const displayR = Math.min(255, r * 20);
+                            const displayG = Math.min(255, g * 20);
+                            const displayB = Math.min(255, b * 20);
+                            const hexColor = '#' + ((1 << 24) + (displayR << 16) + (displayG << 8) + displayB).toString(16).slice(1);
+                            cell.style.backgroundColor = hexColor;
+                            const maxBrightness = Math.max(displayR, displayG, displayB);
+                            cell.style.opacity = Math.max(0.5, maxBrightness / 255);
+                        }
+                    }
+                    lastSentBuffer = "";
+                    if (sendTimeout) { clearTimeout(sendTimeout); sendTimeout = null; }
+                    sendToESP32();
+                    importText.textContent = '✓ Imported!';
+                    importBtn.style.opacity = '1';
+                    setTimeout(() => { importText.textContent = 'IMG'; importBtn.style.opacity = '1'; }, 1500);
+                    imageInput.value = '';
+                } catch (error) {
+                    console.error('Error processing image:', error);
+                    alert('Error processing image. Please try another image.');
+                    importText.textContent = originalText;
+                    importBtn.style.opacity = '1';
+                    importBtn.style.cursor = 'pointer';
+                    imageInput.value = '';
+                }
+            };
+            img.onerror = () => {
+                alert('Error loading image. Please try another file.');
+                importText.textContent = originalText;
+                importBtn.style.opacity = '1';
+                importBtn.style.cursor = 'pointer';
+                imageInput.value = '';
+            };
+            img.src = e.target.result;
+        };
+        reader.onerror = () => {
+            alert('Error reading file. Please try again.');
+            importText.textContent = originalText;
+            importBtn.style.opacity = '1';
+            importBtn.style.cursor = 'pointer';
+            imageInput.value = '';
+        };
+        reader.readAsDataURL(file);
+    });
 
     function handleTouch(e) {
         const element = document.elementFromPoint(e.touches[0].clientX, e.touches[0].clientY);
         if (element && element.classList.contains('matrix-cell')) paintCell(element);
     }
 
-    // THE FIX: Resetting lastSentBuffer so a clear ALWAYS overrides a running animation
     document.getElementById('clear-btn').addEventListener('click', () => {
-        document.querySelectorAll('.matrix-cell').forEach(cell => { cell.dataset.r=0; cell.dataset.g=0; cell.dataset.b=0; cell.style.backgroundColor='#000'; cell.style.opacity=1; });
+        document.querySelectorAll('.matrix-cell').forEach(cell => { 
+            cell.dataset.r=0; cell.dataset.g=0; cell.dataset.b=0; 
+            cell.style.backgroundColor='#000'; 
+            cell.style.opacity=1; 
+        });
         lastSentBuffer = ""; 
+        if (sendTimeout) {
+            clearTimeout(sendTimeout);
+            sendTimeout = null;
+        }
         sendToESP32(); 
     });
 
@@ -514,7 +706,17 @@ const char matrix_operator_html[] PROGMEM = R"rawliteral(
         const b64Payload = encodeFrameToBase64();
         if (b64Payload === lastSentBuffer) return;
         lastSentBuffer = b64Payload;
-        fetch('/draw', { method: 'POST', body: b64Payload }).catch(err => console.error(err));
+        if (sendTimeout) {
+            clearTimeout(sendTimeout);
+        }
+        if (isDrawing) {
+            sendTimeout = setTimeout(() => {
+                fetch('/draw', { method: 'POST', body: b64Payload }).catch(err => console.error(err));
+                sendTimeout = null;
+            }, 16); // ~60fps throttle
+        } else {
+            fetch('/draw', { method: 'POST', body: b64Payload }).catch(err => console.error(err));
+        }
     }
 
     // Desktop Drag-to-Scroll for Galleries
