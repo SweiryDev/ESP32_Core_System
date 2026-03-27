@@ -363,33 +363,6 @@ const char matrix_operator_html[] PROGMEM = R"rawliteral(
         return matrix;
     }
     
-    function applyImageMatrix(matrix) {
-        const cells = Array.from(document.querySelectorAll('.matrix-cell'));
-        
-        for (let row = 0; row < 8; row++) {
-            for (let col = 0; col < 8; col++) {
-                const cell = cells[row * 8 + col];
-                const [r, g, b] = matrix[row][col];
-                
-                cell.dataset.r = r;
-                cell.dataset.g = g;
-                cell.dataset.b = b;
-                
-                const hexColor = '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
-                cell.style.backgroundColor = hexColor;
-                
-                const maxBrightness = Math.max(r, g, b);
-                cell.style.opacity = Math.max(0.3, maxBrightness / 255);
-            }
-        }
-        
-        lastSentBuffer = "";
-        if (sendTimeout) {
-            clearTimeout(sendTimeout);
-            sendTimeout = null;
-        }
-        sendToESP32();
-    }
 
     // Deploy Mathematical Anim Preset
     function deployAnimPreset(key) {
@@ -665,9 +638,9 @@ const char matrix_operator_html[] PROGMEM = R"rawliteral(
         reader.readAsDataURL(file);
     });
 
-    function handleTouch(e) {
+    function handleTouch(e, immediateSend=false) {
         const element = document.elementFromPoint(e.touches[0].clientX, e.touches[0].clientY);
-        if (element && element.classList.contains('matrix-cell')) paintCell(element);
+        if (element && element.classList.contains('matrix-cell')) paintCell(element, immediateSend);
     }
 
     document.getElementById('clear-btn').addEventListener('click', () => {
@@ -706,9 +679,7 @@ const char matrix_operator_html[] PROGMEM = R"rawliteral(
         const b64Payload = encodeFrameToBase64();
         if (b64Payload === lastSentBuffer) return;
         lastSentBuffer = b64Payload;
-        if (sendTimeout) {
-            clearTimeout(sendTimeout);
-        }
+        if (sendTimeout) return;
         if (isDrawing) {
             sendTimeout = setTimeout(() => {
                 fetch('/draw', { method: 'POST', body: b64Payload }).catch(err => console.error(err));
